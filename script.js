@@ -1,10 +1,31 @@
+'use strict';
 /* ============================================
    Lắc Quẻ Đầu Năm - Tết Bính Ngọ 2026
    Complete Rewrite — Clean & Optimized
    ============================================ */
 
 // ============================================
-// Fortune Data (28 quẻ)
+// Timing Constants (ms)
+// ============================================
+const SHAKE_MIN_DURATION = 2000;
+const SHAKE_RANDOM_RANGE = 800;
+const RING_PULSE_INTERVAL = 400;
+const STICK_SHOW_DELAY = 1400;
+const SHAKE_GENTLE_PHASE = 500;
+const SHAKE_SLOWDOWN_PHASE = 800;
+const TILT_DURATION = 500;
+const RATTLE_INTERVAL = 180;
+const RESULT_TRANSITION_DELAY = 550;
+const CONFETTI_LAUNCH_DELAY = 300;
+const FIREWORK_LAUNCH_DELAY = 500;
+const RESET_TRANSITION_DELAY = 600;
+const CONFETTI_LIFETIME = 5000;
+const SPARKLE_LIFETIME = 1200;
+const SHARE_FEEDBACK_DURATION = 2000;
+const INSTRUCTION_PULSE_DELAY = 1800;
+
+// ============================================
+// Fortune Data (100 quẻ)
 // ============================================
 const FORTUNES = [
   {
@@ -757,10 +778,12 @@ const resultAdvice = $('resultAdvice');
 // ============================================
 let isShaking = false;
 let canShake = true;
-let shakeTimer = null;
+let shakeRAF = null;
 let ringInterval = null;
+let rattleInterval = null;
 let recentDraws = []; // Track recent draws to avoid repeats
 const MAX_HISTORY = 5;
+let motionPermissionRequested = false; // Avoid re-requesting on every tap
 
 // ============================================
 // Decorations
@@ -802,6 +825,8 @@ function createRingPulse() {
 // ============================================
 // Confetti
 // ============================================
+const effectsContainer = document.getElementById('effectsContainer');
+
 function launchConfetti() {
   const colors = ['#FFD700', '#FF6B6B', '#FFB7C5', '#E63946', '#FFE55C', '#FFA500'];
   const frag = document.createDocumentFragment();
@@ -811,8 +836,8 @@ function launchConfetti() {
     c.style.cssText = `left:${20 + Math.random() * 60}%;top:-10px;background:${colors[Math.random() * colors.length | 0]};animation-duration:${2.5 + Math.random() * 2}s;animation-delay:${Math.random() * 0.5}s;width:${5 + Math.random() * 5}px;height:${5 + Math.random() * 5}px;border-radius:${Math.random() > 0.5 ? '50%' : '2px'};`;
     frag.appendChild(c);
   }
-  document.body.appendChild(frag);
-  setTimeout(() => document.querySelectorAll('.confetti').forEach(el => el.remove()), 5000);
+  effectsContainer.appendChild(frag);
+  setTimeout(() => { while (effectsContainer.firstChild) effectsContainer.firstChild.remove(); }, CONFETTI_LIFETIME);
 }
 
 // ============================================
@@ -823,17 +848,18 @@ function createSparkles() {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + 50;
   const colors = ['#FFD700', '#FF6B6B', '#FFB7C5', '#FFE55C', '#FFA500'];
-  const frag = document.createDocumentFragment();
+  const sparkleContainer = document.createElement('div');
+  sparkleContainer.className = 'sparkle-batch';
   for (let i = 0; i < 14; i++) {
     const s = document.createElement('div');
     s.className = 'sparkle';
     const angle = (Math.PI * 2 / 14) * i;
     const dist = 40 + Math.random() * 90;
     s.style.cssText = `left:${cx}px;top:${cy}px;--tx:${Math.cos(angle) * dist}px;--ty:${Math.sin(angle) * dist}px;animation-delay:${Math.random() * 0.2}s;background:${colors[Math.random() * colors.length | 0]};width:${4 + Math.random() * 4}px;height:${4 + Math.random() * 4}px;`;
-    frag.appendChild(s);
+    sparkleContainer.appendChild(s);
   }
-  document.body.appendChild(frag);
-  setTimeout(() => document.querySelectorAll('.sparkle').forEach(el => el.remove()), 1200);
+  document.body.appendChild(sparkleContainer);
+  setTimeout(() => sparkleContainer.remove(), SPARKLE_LIFETIME);
 }
 
 // ============================================
@@ -843,7 +869,8 @@ function startShake() {
   if (!canShake || isShaking) return;
   isShaking = true;
 
-  ongQueWrapper.style.animation = '';
+  ongQueWrapper.style.animation = 'none';
+  ongQueWrapper.style.transition = 'none';
   void ongQueWrapper.offsetHeight;
   ongQueWrapper.classList.add('shaking');
   btnShake.classList.add('disabled');
@@ -851,17 +878,79 @@ function startShake() {
   instruction.style.animation = 'none';
   instruction.classList.remove('pulsing');
 
-  ringInterval = setInterval(createRingPulse, 400);
+  // Realistic rattling sound throughout shaking
+  rattleInterval = setInterval(playRattleSound, RATTLE_INTERVAL);
+  ringInterval = setInterval(createRingPulse, RING_PULSE_INTERVAL);
 
-  const dur = 1500 + Math.random() * 1000;
-  shakeTimer = setTimeout(finishShake, dur);
+  const totalDuration = SHAKE_MIN_DURATION + Math.random() * SHAKE_RANDOM_RANGE;
+  let shakeStart = null;
+  let risingStick = null;
+
+  function tick(now) {
+    if (!shakeStart) shakeStart = now;
+    const t = now - shakeStart;
+
+    if (t >= totalDuration) {
+      shakeRAF = null;
+      finishShake(risingStick);
+      return;
+    }
+
+    const gentleEnd = SHAKE_GENTLE_PHASE;
+    const intenseEnd = totalDuration - SHAKE_SLOWDOWN_PHASE;
+    let x, y, rot;
+
+    if (t < gentleEnd) {
+      // Phase 1: Gentle sine-wave wobble, intensity ramps up
+      const p = t / gentleEnd;
+      x = Math.sin(t * 0.02) * 3 * p;
+      y = Math.sin(t * 0.015) * 1 * p;
+      rot = Math.sin(t * 0.018) * 2 * p;
+    } else if (t < intenseEnd) {
+      // Phase 2: Layered sine waves for smooth organic shake
+      x = Math.sin(t * 0.035) * 4 + Math.sin(t * 0.071) * 1.5;
+      y = Math.cos(t * 0.029) * 1.5 + Math.sin(t * 0.053) * 0.8;
+      rot = Math.sin(t * 0.025) * 2.5 + Math.cos(t * 0.061) * 1;
+    } else {
+      // Phase 3: Slowing down with rhythmic tilts
+      const p = (t - intenseEnd) / SHAKE_SLOWDOWN_PHASE;
+      const decay = 1 - p * 0.8;
+      x = Math.sin(t * 0.02) * 3 * decay;
+      y = Math.cos(t * 0.015) * 1 * decay;
+      rot = Math.sin(t * 0.018) * 2 * decay;
+    }
+
+    // Progressively raise one stick out of the tube
+    if (!risingStick && t >= gentleEnd) {
+      const sticks = ongQue.querySelectorAll('.stick');
+      risingStick = sticks[Math.random() * sticks.length | 0];
+      risingStick.classList.add('rising');
+    }
+    if (risingStick && t >= gentleEnd) {
+      const riseProgress = Math.min((t - gentleEnd) / (totalDuration - gentleEnd), 1);
+      // Ease-in-quad: starts slow, accelerates — like a stick gradually working its way out
+      const eased = riseProgress * riseProgress;
+      const riseAmount = eased * 55;
+      const i = parseInt(risingStick.style.getPropertyValue('--i'));
+      const baseRot = (i - 3) * 4;
+      risingStick.style.transform = `rotate(${baseRot}deg) translateY(${-riseAmount}px)`;
+    }
+
+    ongQueWrapper.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg)`;
+    shakeRAF = requestAnimationFrame(tick);
+  }
+
+  shakeRAF = requestAnimationFrame(tick);
 }
 
-function finishShake() {
+let stickAnimRAF = null;
+
+function finishShake(risingStick) {
   isShaking = false;
   canShake = false;
   ongQueWrapper.classList.remove('shaking');
   clearInterval(ringInterval);
+  clearInterval(rattleInterval);
 
   // Pick a fortune that hasn't been drawn recently
   let fortune;
@@ -873,12 +962,118 @@ function finishShake() {
   recentDraws.push(fortune.id);
   if (recentDraws.length > MAX_HISTORY) recentDraws.shift();
 
-  stickNumber.textContent = fortune.id;
-  fallingStick.style.display = '';
-  fallingStick.classList.add('show');
-  playWoodSound();
+  // Tilt phase: ống quẻ tilts gently to pour out a stick
+  ongQueWrapper.style.transition = 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)';
+  ongQueWrapper.style.transform = 'rotate(-15deg) translateY(-5px)';
 
-  setTimeout(() => showResult(fortune), 1400);
+  setTimeout(() => {
+    stickNumber.textContent = fortune.id;
+    stickNumber.classList.remove('visible');
+    playWoodSound();
+
+    // ──── Phase 1: Morph (small stick → big stick) ────
+    // Position the falling stick exactly at the rising stick's location
+    const sceneRect = document.getElementById('scene').getBoundingClientRect();
+    let startX, startY, startScale, startRot;
+
+    if (risingStick) {
+      const stickRect = risingStick.getBoundingClientRect();
+      // Position relative to the scene container
+      startX = stickRect.left - sceneRect.left + stickRect.width / 2;
+      startY = stickRect.top - sceneRect.top + stickRect.height;
+      startScale = stickRect.width / 18; // 18px is the falling-stick-body width
+      const i = parseInt(risingStick.style.getPropertyValue('--i'));
+      startRot = (i - 3) * 4; // base rotation of the stick
+    } else {
+      // Fallback: center of the ống quẻ
+      const oqRect = ongQue.getBoundingClientRect();
+      startX = oqRect.left - sceneRect.left + oqRect.width / 2;
+      startY = oqRect.top - sceneRect.top + 30;
+      startScale = 0.13;
+      startRot = 0;
+    }
+
+    // Set initial position and scale
+    fallingStick.style.display = '';
+    fallingStick.style.left = startX + 'px';
+    fallingStick.style.top = startY + 'px';
+    fallingStick.style.transform = `translate(-50%, -100%) scale(${startScale}) rotate(${startRot}deg)`;
+    fallingStick.classList.add('show');
+
+    // Hide small rising stick after a brief overlap
+    if (risingStick) {
+      setTimeout(() => {
+        risingStick.style.visibility = 'hidden';
+        risingStick.classList.remove('rising');
+      }, 120);
+    }
+
+    // Return ống quẻ to upright position
+    setTimeout(() => {
+      ongQueWrapper.style.transition = 'transform 0.6s ease-out';
+      ongQueWrapper.style.transform = '';
+    }, 350);
+
+    // ──── Animate: Morph → Rise → Reveal Number → Show Result ────
+    const MORPH_DURATION = 700;     // ms: scale up to full size (slow, smooth)
+    const HOLD_DURATION = 700;      // ms: pause to show the number
+    const TOTAL_DURATION = MORPH_DURATION + HOLD_DURATION;
+
+    // Target positions
+    const centerX = sceneRect.width / 2;
+    const targetY = sceneRect.height * 0.30; // center area
+
+    let morphStart = null;
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+    function animateStick(now) {
+      if (!morphStart) morphStart = now;
+      const elapsed = now - morphStart;
+
+      let x, y, scale, rot, numberVisible = false;
+
+      if (elapsed < MORPH_DURATION) {
+        // Phase 1: MORPH — smoothly scale up and drift to center
+        // Use easeInOutCubic so it starts gently (no snap) and accelerates mid-way
+        const p = easeInOutCubic(elapsed / MORPH_DURATION);
+        scale = startScale + (1 - startScale) * p;
+        x = startX + (centerX - startX) * p;
+        y = startY + (targetY - startY) * p;
+        rot = startRot * (1 - p); // gradually straighten
+        // Reveal number once mostly scaled up
+        if (p > 0.6) numberVisible = true;
+      } else if (elapsed < TOTAL_DURATION) {
+        // Phase 2: HOLD — show the number with a gentle floating bob
+        const p = (elapsed - MORPH_DURATION) / HOLD_DURATION;
+        const ep = easeOutCubic(p);
+        scale = 1;
+        x = centerX;
+        y = targetY + Math.sin(p * Math.PI) * -4; // gentle bob
+        rot = Math.sin(p * Math.PI * 1.5) * 1.5; // very subtle sway
+        numberVisible = true;
+      } else {
+        // Animation complete — transition to result
+        stickAnimRAF = null;
+        stickNumber.classList.add('visible');
+        showResult(fortune);
+        return;
+      }
+
+      // Apply transforms
+      fallingStick.style.left = x + 'px';
+      fallingStick.style.top = y + 'px';
+      fallingStick.style.transform = `translate(-50%, -100%) scale(${scale}) rotate(${rot}deg)`;
+      if (numberVisible) stickNumber.classList.add('visible');
+
+      stickAnimRAF = requestAnimationFrame(animateStick);
+    }
+
+    stickAnimRAF = requestAnimationFrame(animateStick);
+  }, TILT_DURATION);
 }
 
 function showResult(fortune) {
@@ -890,6 +1085,10 @@ function showResult(fortune) {
     // Kill the falling stick completely
     fallingStick.classList.remove('show');
     fallingStick.style.display = 'none';
+    fallingStick.style.left = '';
+    fallingStick.style.top = '';
+    fallingStick.style.transform = '';
+    stickNumber.classList.remove('visible');
 
     // Populate result
     resultQueNumber.textContent = `Quẻ số ${fortune.id}`;
@@ -899,37 +1098,65 @@ function showResult(fortune) {
     resultMeaning.innerHTML = `<p>${fortune.meaning}</p>`;
     resultAdvice.innerHTML = `<p>${fortune.advice}</p>`;
 
+    // Announce result to screen readers
+    const liveRegion = document.getElementById('resultAnnounce');
+    if (liveRegion) {
+      liveRegion.textContent = `${fortune.typeLabel}. ${fortune.meaning}`;
+    }
+
     // Show result state
     resultState.classList.add('show');
 
     createSparkles();
-    setTimeout(() => launchConfetti(), 300);
+    setTimeout(() => launchConfetti(), CONFETTI_LAUNCH_DELAY);
 
     if (fortune.type === 'thuong-thuong' || fortune.type === 'thuong') {
-      setTimeout(() => launchFireworks(), 500);
+      setTimeout(() => launchFireworks(), FIREWORK_LAUNCH_DELAY);
     }
 
     playRevealSound();
 
     // Scroll to top on mobile for better UX
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, 550);
+  }, RESULT_TRANSITION_DELAY);
 }
 
 function resetGame() {
+  // Clean up any ongoing animations
+  if (shakeRAF) { cancelAnimationFrame(shakeRAF); shakeRAF = null; }
+  if (stickAnimRAF) { cancelAnimationFrame(stickAnimRAF); stickAnimRAF = null; }
+  clearInterval(rattleInterval);
+  clearInterval(ringInterval);
+
   // Hide result
   resultState.classList.remove('show');
   stopFireworks();
-  document.querySelectorAll('.confetti, .sparkle').forEach(el => el.remove());
+  // Clear effects container and any sparkle batches
+  while (effectsContainer.firstChild) effectsContainer.firstChild.remove();
+  document.querySelectorAll('.sparkle-batch').forEach(el => el.remove());
 
   setTimeout(() => {
-    // Fully reset falling stick
+    // Fully reset falling stick — keep hidden until next shake
     fallingStick.classList.remove('show');
-    fallingStick.style.display = '';
+    fallingStick.style.display = 'none';
+    fallingStick.style.left = '';
+    fallingStick.style.top = '';
+    fallingStick.style.transform = '';
+    stickNumber.classList.remove('visible');
+
+    // Reset all stick inline styles from rising animation
+    ongQue.querySelectorAll('.stick').forEach(s => {
+      s.style.transform = '';
+      s.style.visibility = '';
+      s.style.zIndex = '';
+      s.classList.remove('rising');
+    });
 
     // Restore shake state
     shakeState.classList.remove('hidden');
     ongQueWrapper.classList.remove('shaking');
+    ongQueWrapper.style.transform = '';
+    ongQueWrapper.style.transition = '';
     btnShake.classList.remove('disabled');
     instruction.textContent = 'Nhấn hoặc lắc điện thoại để xin quẻ';
     instruction.style.animation = '';
@@ -940,7 +1167,7 @@ function resetGame() {
     ongQueWrapper.style.animation = 'none';
     void ongQueWrapper.offsetHeight;
     ongQueWrapper.style.animation = 'ongQueIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both';
-  }, 600);
+  }, RESET_TRANSITION_DELAY);
 }
 
 // ============================================
@@ -1107,7 +1334,7 @@ function playWoodSound() {
       osc.connect(gain); gain.connect(ac.destination);
       osc.start(ac.currentTime + i * 0.03); osc.stop(ac.currentTime + 0.25);
     });
-  } catch (e) { }
+  } catch (e) { console.warn('Audio: wood sound failed', e); }
 }
 
 function playRevealSound() {
@@ -1123,7 +1350,7 @@ function playRevealSound() {
       osc.connect(gain); gain.connect(ac.destination);
       osc.start(ac.currentTime + i * 0.12); osc.stop(ac.currentTime + i * 0.12 + 0.5);
     });
-  } catch (e) { }
+  } catch (e) { console.warn('Audio: reveal sound failed', e); }
 }
 
 function playExplosionSound() {
@@ -1139,7 +1366,7 @@ function playExplosionSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.12);
     const filt = ac.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.setValueAtTime(1800, ac.currentTime);
     src.connect(filt); filt.connect(gain); gain.connect(ac.destination); src.start();
-  } catch (e) { }
+  } catch (e) { console.warn('Audio: explosion sound failed', e); }
 }
 
 function playBellSound() {
@@ -1154,7 +1381,25 @@ function playBellSound() {
       osc.connect(gain); gain.connect(ac.destination);
       osc.start(ac.currentTime); osc.stop(ac.currentTime + 0.8);
     });
-  } catch (e) { }
+  } catch (e) { console.warn('Audio: bell sound failed', e); }
+}
+
+function playRattleSound() {
+  try {
+    const ac = getAudioContext();
+    const now = ac.currentTime;
+    const len = ac.sampleRate * 0.035;
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const filt = ac.createBiquadFilter(); filt.type = 'bandpass';
+    filt.frequency.value = 1800 + Math.random() * 1500; filt.Q.value = 1.5;
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.04 + Math.random() * 0.02, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+    src.connect(filt); filt.connect(gain); gain.connect(ac.destination); src.start();
+  } catch (e) { console.warn('Audio: rattle sound failed', e); }
 }
 
 // ============================================
@@ -1172,8 +1417,10 @@ function handleMotion(e) {
 }
 
 function requestMotionPermission() {
+  if (motionPermissionRequested) return;
+  motionPermissionRequested = true;
   if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-    DeviceMotionEvent.requestPermission().then(r => { if (r === 'granted') window.addEventListener('devicemotion', handleMotion); }).catch(() => { });
+    DeviceMotionEvent.requestPermission().then(r => { if (r === 'granted') window.addEventListener('devicemotion', handleMotion); }).catch(() => { motionPermissionRequested = false; });
   } else if ('DeviceMotionEvent' in window) {
     window.addEventListener('devicemotion', handleMotion);
   }
@@ -1184,8 +1431,13 @@ function requestMotionPermission() {
 // ============================================
 btnShake.addEventListener('click', () => { requestMotionPermission(); playBellSound(); startShake(); });
 ongQue.addEventListener('click', () => { requestMotionPermission(); playBellSound(); startShake(); });
+ongQue.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); requestMotionPermission(); playBellSound(); startShake(); } });
 btnAgain.addEventListener('click', resetGame);
-window.addEventListener('resize', resizeCanvas);
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resizeCanvas, 150);
+});
 
 // Share button
 const btnShare = $('btnShare');
@@ -1197,8 +1449,11 @@ function shareFortune() {
   const num = resultQueNumber.textContent;
   const type = resultQueType.textContent;
   const poem = resultPoem.innerText;
-  const meaning = resultMeaning.innerText.replace('📜 Giải nghĩa', '').trim();
-  const advice = resultAdvice.innerText.replace('🐴 Lời khuyên năm Ngọ', '').trim();
+  // Extract text from <p> inside meaning/advice, avoiding ::before pseudo-element content
+  const meaningP = resultMeaning.querySelector('p');
+  const adviceP = resultAdvice.querySelector('p');
+  const meaning = meaningP ? meaningP.textContent.trim() : '';
+  const advice = adviceP ? adviceP.textContent.trim() : '';
   const text = `🐴 Lắc Quẻ Đầu Năm — Tết Bính Ngọ 2026\n\n${num} — ${type}\n\n${poem}\n\n📜 ${meaning}\n\n🐴 ${advice}\n\n🎆 Chúc Mừng Năm Mới!`;
 
   if (navigator.share) {
@@ -1206,12 +1461,12 @@ function shareFortune() {
   } else {
     navigator.clipboard.writeText(text).then(() => {
       btnShare.textContent = '✅ Đã sao chép!';
-      setTimeout(() => { btnShare.innerHTML = '<span>📤</span> Chia Sẻ Quẻ'; }, 2000);
+      setTimeout(() => { btnShare.innerHTML = '<span>📤</span> Chia Sẻ Quẻ'; }, SHARE_FEEDBACK_DURATION);
     }).catch(() => { });
   }
 }
 
-setTimeout(() => instruction.classList.add('pulsing'), 1800);
+setTimeout(() => instruction.classList.add('pulsing'), INSTRUCTION_PULSE_DELAY);
 
 // ============================================
 // Init

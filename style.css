@@ -36,6 +36,11 @@
     box-sizing: border-box;
 }
 
+button,
+[role="button"] {
+    touch-action: manipulation;
+}
+
 html {
     font-size: 16px;
     -webkit-tap-highlight-color: transparent;
@@ -429,9 +434,32 @@ body::after {
     }
 }
 
-.ong-que-wrapper.shaking {
-    animation: shakeOngQue 0.06s ease-in-out infinite alternate;
+/* .ong-que-wrapper.shaking — transform controlled by JS rAF */
+
+.ong-que-wrapper.shaking .stick {
+    animation: stickBounce 0.28s ease-in-out infinite;
+    animation-delay: calc(var(--i) * 30ms);
 }
+
+.ong-que-wrapper.shaking .stick.rising {
+    animation: none !important;
+    z-index: 1;
+    transition: transform 0.12s ease-out;
+}
+
+@keyframes stickBounce {
+
+    0%,
+    100% {
+        transform: rotate(calc((var(--i) - 3) * 4deg)) translateY(0);
+    }
+
+    45% {
+        transform: rotate(calc((var(--i) - 3) * 4deg + 1.5deg)) translateY(-10px);
+    }
+}
+
+/* stickRising removed — rising is now JS-driven */
 
 .ong-que {
     position: relative;
@@ -507,9 +535,9 @@ body::after {
 .stick {
     position: absolute;
     width: 5px;
-    height: 55px;
+    height: 65px;
     background: linear-gradient(to bottom, var(--gold-light), var(--brown-light), var(--brown));
-    border-radius: 2px 2px 1px 1px;
+    border-radius: 1px 1px 0 0;
     bottom: 0;
     left: calc(50% + (var(--i) - 3) * 7px);
     transform-origin: bottom center;
@@ -525,18 +553,10 @@ body::after {
     right: 0;
     height: 10px;
     background: var(--red-bright);
-    border-radius: 2px 2px 0 0;
+    border-radius: 1px 1px 0 0;
 }
 
-@keyframes shakeOngQue {
-    0% {
-        transform: translateX(-4px) rotate(-2deg);
-    }
-
-    100% {
-        transform: translateX(4px) rotate(2deg);
-    }
-}
+/* shakeOngQue removed — shake is now JS-driven via rAF */
 
 /* ========== Instruction ========== */
 .instruction {
@@ -568,60 +588,44 @@ body::after {
 /* ========== Falling Stick ========== */
 .falling-stick {
     position: absolute;
-    top: 15%;
-    left: 50%;
-    transform: translateX(-50%);
-    opacity: 0;
     pointer-events: none;
     z-index: 10;
     will-change: transform, opacity;
+    opacity: 0;
+    transform-origin: bottom center;
 }
 
 .falling-stick.show {
-    animation: stickPopOut 0.9s var(--ease-spring) forwards;
+    opacity: 1;
 }
 
 .falling-stick-body {
-    width: 38px;
-    height: 170px;
+    width: 18px;
+    height: 190px;
     background: linear-gradient(to bottom,
             var(--red-bright) 0%, var(--red-bright) 15%,
-            var(--gold-light) 15%, var(--brown-light) 50%, var(--brown) 100%);
-    border-radius: 4px;
+            var(--gold-light) 15%, var(--gold-light) 20%,
+            var(--brown-light) 45%, var(--brown) 100%);
+    border-radius: 1px 1px 0 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: var(--shadow-md), 0 0 15px rgba(255, 215, 0, 0.25);
-    border: 1px solid var(--gold-deep);
+    box-shadow: 2px 1px 4px rgba(0, 0, 0, 0.25);
+    transform-origin: bottom center;
 }
 
 .stick-number {
     font-family: var(--font-cali);
-    font-size: 2rem;
+    font-size: 1rem;
     color: var(--red-deep);
     text-shadow: 0 0 3px rgba(255, 255, 255, 0.4);
     writing-mode: vertical-rl;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-@keyframes stickPopOut {
-    0% {
-        opacity: 0;
-        transform: translateX(-50%) translateY(60px) rotate(0deg) scale(0.3);
-    }
-
-    40% {
-        opacity: 1;
-        transform: translateX(-50%) translateY(-25px) rotate(-15deg) scale(1.1);
-    }
-
-    70% {
-        transform: translateX(-50%) translateY(5px) rotate(-5deg) scale(0.97);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0) rotate(-8deg) scale(1);
-    }
+.stick-number.visible {
+    opacity: 1;
 }
 
 /* ========== Result Card ========== */
@@ -1023,7 +1027,7 @@ body::after {
 .footer-sub {
     font-size: 0.7rem;
     margin-top: 0.2rem;
-    opacity: 0.35 !important;
+    opacity: 0.35;
 }
 
 /* ========== Firework Canvas ========== */
@@ -1032,6 +1036,15 @@ body::after {
     inset: 0;
     pointer-events: none;
     z-index: 100;
+}
+
+/* ========== Effects Container ========== */
+#effectsContainer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 101;
+    overflow: hidden;
 }
 
 /* ========== Sparkle ========== */
@@ -1135,6 +1148,12 @@ body::after {
     .result-card-inner {
         padding: 1.1rem;
     }
+
+    .btn-share,
+    .btn-again {
+        padding: 0.95rem 0.6rem;
+        min-height: 48px;
+    }
 }
 
 @media (min-height: 800px) {
@@ -1152,4 +1171,17 @@ body::after {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* Screen reader only */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
