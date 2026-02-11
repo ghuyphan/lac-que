@@ -1405,15 +1405,38 @@ function playRattleSound() {
 // ============================================
 // Device Shake Detection (Mobile)
 // ============================================
-let lastAcc = { x: 0, y: 0, z: 0 };
+let lastAcc = null;
 
 function handleMotion(e) {
-  if (!canShake) return;
+  if (!canShake || isShaking) return;
+
+  // 1. Try acceleration (without gravity) - cleaner signal
+  if (e.acceleration && e.acceleration.x !== null) {
+    const { x, y, z } = e.acceleration;
+    const mag = Math.sqrt(x * x + y * y + z * z);
+    if (mag > 12) { // Threshold ~1.2g
+      startShake();
+    }
+    return;
+  }
+
+  // 2. Fallback: accelerationIncludingGravity (delta check)
   const a = e.accelerationIncludingGravity;
   if (!a) return;
-  const dx = Math.abs(a.x - lastAcc.x), dy = Math.abs(a.y - lastAcc.y), dz = Math.abs(a.z - lastAcc.z);
+
+  if (!lastAcc) {
+    lastAcc = { x: a.x, y: a.y, z: a.z };
+    return;
+  }
+
+  const dx = Math.abs(a.x - lastAcc.x);
+  const dy = Math.abs(a.y - lastAcc.y);
+  const dz = Math.abs(a.z - lastAcc.z);
   lastAcc = { x: a.x, y: a.y, z: a.z };
-  if ((dx > 15 || dy > 15 || dz > 15) && !isShaking) startShake();
+
+  if ((dx > 12 || dy > 12 || dz > 12)) {
+    startShake();
+  }
 }
 
 function requestMotionPermission() {
