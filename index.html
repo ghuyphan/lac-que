@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Lắc Quẻ Đầu Năm — Tết Bính Ngọ 2026 | Xem Vận Mệnh</title>
+  <meta name="description"
+    content="Lắc quẻ đầu năm Tết Bính Ngọ 2026 — 100 quẻ xin vận mệnh năm mới. Xin quẻ online miễn phí.">
+  <meta name="theme-color" content="#8B0000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐴</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700;800&family=Ma+Shan+Zheng&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- Floating Decorations -->
+  <div class="decorations" id="decorations"></div>
+
+  <!-- Lanterns -->
+  <div class="lantern lantern-left" aria-hidden="true">
+    <div class="lantern-string"></div>
+    <div class="lantern-top"></div>
+    <div class="lantern-body"><span>福</span></div>
+    <div class="lantern-tassel"></div>
+  </div>
+  <div class="lantern lantern-right" aria-hidden="true">
+    <div class="lantern-string"></div>
+    <div class="lantern-top"></div>
+    <div class="lantern-body"><span>禄</span></div>
+    <div class="lantern-tassel"></div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="container">
+    <header class="header">
+      <div class="header-ornament">✦ ✦ ✦</div>
+      <h1 class="title">Lắc Quẻ Đầu Năm</h1>
+      <p class="subtitle">🐴 Tết Bính Ngọ 2026 🐴</p>
+      <p class="fortune-count">100 quẻ • 5 hạng vận mệnh</p>
+    </header>
+
+    <!-- Scene: holds both states (ống quẻ vs result) -->
+    <div class="scene" id="scene">
+      <!-- State 1: Fortune shaking -->
+      <div class="shake-state" id="shakeState">
+        <div class="ong-que-wrapper" id="ongQueWrapper">
+          <div class="ong-que" id="ongQue" role="button" aria-label="Nhấn để lắc quẻ" tabindex="0">
+            <div class="ong-que-body">
+              <div class="ong-que-pattern"></div>
+              <div class="ong-que-label">籤</div>
+            </div>
+            <div class="sticks">
+              <div class="stick" style="--i:0"></div>
+              <div class="stick" style="--i:1"></div>
+              <div class="stick" style="--i:2"></div>
+              <div class="stick" style="--i:3"></div>
+              <div class="stick" style="--i:4"></div>
+              <div class="stick" style="--i:5"></div>
+              <div class="stick" style="--i:6"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Falling Stick -->
+        <div class="falling-stick" id="fallingStick" aria-hidden="true">
+          <div class="falling-stick-body">
+            <span class="stick-number" id="stickNumber"></span>
+          </div>
+        </div>
+        <p class="instruction" id="instruction">Nhấn hoặc lắc điện thoại để xin quẻ</p>
+        <button class="btn-shake" id="btnShake" aria-label="Xin quẻ">
+          <span class="btn-shake-icon">🙏</span>
+          <span class="btn-shake-text">Xin Quẻ</span>
+        </button>
+      </div>
+
+      <!-- State 2: Result card -->
+      <div class="result-state" id="resultState">
+        <div class="result-card" id="resultCard">
+          <div class="result-card-inner">
+            <div class="result-header">
+              <div class="result-que-number" id="resultQueNumber"></div>
+              <div class="result-que-type" id="resultQueType"></div>
+            </div>
+            <div class="result-divider"><span>🐴</span></div>
+            <div class="result-poem" id="resultPoem"></div>
+            <div class="result-meaning" id="resultMeaning"></div>
+            <div class="result-advice" id="resultAdvice"></div>
+          </div>
+          <div class="result-actions">
+            <button class="btn-share" id="btnShare" aria-label="Chia sẻ quẻ">
+              <span>📤</span> Chia Sẻ Quẻ
+            </button>
+            <button class="btn-again" id="btnAgain" aria-label="Xin quẻ khác">
+              <span>🔄</span> Xin Quẻ Khác
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>Chúc Mừng Năm Mới 2026 🎆</p>
+    <p class="footer-sub">An Khang Thịnh Vượng • Vạn Sự Như Ý</p>
+  </footer>
+
+  <canvas id="fireworkCanvas" aria-hidden="true"></canvas>
+  <script src="script.js"></script>
+</body>
+
+</html>
